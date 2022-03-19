@@ -5,8 +5,8 @@ pragma solidity =0.6.12;
 import './uniswapv2/interfaces/IUniswapV2Pair.sol';
 import './uniswapv2/interfaces/IUniswapV2Factory.sol';
 import './uniswapv2/interfaces/IUniswapV2Router02.sol';
-
 import './uniswapv2/interfaces/IERC20.sol';
+import './uniswapv2/libraries/TransferHelper.sol';
 import "./Ownable.sol";
 
 interface IMasterChef {
@@ -64,7 +64,7 @@ contract SimpleWallet is Ownable {
         uint _masterChefPoolId,
         uint _masterChefPoolAmount
     ) external onlyOwner {
-        IERC20Uniswap(sushi).transfer(msg.sender, IERC20Uniswap(sushi).balanceOf(address(this)));
+        TransferHelper.safeTransfer(sushi, msg.sender,IERC20Uniswap(sushi).balanceOf(address(this)));
  
         IMasterChef(chef).withdraw(_masterChefPoolId, _masterChefPoolAmount);
 

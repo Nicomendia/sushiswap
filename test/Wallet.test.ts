@@ -23,6 +23,9 @@ describe("SimpleWallet", function () {
   beforeEach(async function () {
     this.weth = await this.ERC20Mock.deploy("WETH", "ETH", getBigNumber("10000000"))
     await this.weth.deployed()
+
+    this.dai = await this.ERC20Mock.deploy("DAI", "DAI", getBigNumber("10000000"))
+    await this.dai.deployed()
     
     this.sushi = await this.SushiToken.deploy()
     await this.sushi.deployed()
@@ -39,8 +42,8 @@ describe("SimpleWallet", function () {
     this.router = await this.UniswapV2Router02.deploy(this.factory.address, this.weth.address)
     await this.router.deployed()
 
-    const createPairTx = await this.factory.createPair(this.sushi.address, this.weth.address)
-    const _pair = (await createPairTx.wait()).events[0].args.pair
+    let createPairTx = await this.factory.createPair(this.sushi.address, this.weth.address)
+    let _pair = (await createPairTx.wait()).events[0].args.pair
     this.sushiEth = await this.UniswapV2Pair.attach(_pair)
 
     await this.sushi.transfer(this.sushiEth.address, getBigNumber(10))
@@ -49,6 +52,18 @@ describe("SimpleWallet", function () {
     await this.sushiEth.mint(this.alice.address)
 
     await this.chef.add("100", this.sushiEth.address, true)
+
+
+    createPairTx = await this.factory.createPair(this.dai.address, this.weth.address)
+    _pair = (await createPairTx.wait()).events[0].args.pair
+    this.daiEth = await this.UniswapV2Pair.attach(_pair)
+
+    await this.dai.transfer(this.daiEth.address, getBigNumber(10))
+    await this.weth.transfer(this.daiEth.address, getBigNumber(10))
+
+    await this.daiEth.mint(this.alice.address)
+
+    await this.chef.add("100", this.daiEth.address, true)
   })
 
   it("should set correct state variables", async function () {
@@ -111,7 +126,7 @@ describe("SimpleWallet", function () {
     await advanceBlockTo("104")
     await this.wallet.connect(this.bob).updateRewards(0) // block 105
 
-    expect(await this.sushi.balanceOf(this.wallet.address)).to.equal("5000")
+    expect(await this.sushi.balanceOf(this.wallet.address)).to.equal("2500")
   })
 
   it("owner should retire funds with rewards", async function () {
@@ -142,6 +157,30 @@ describe("SimpleWallet", function () {
     
     expect(await this.sushi.balanceOf(this.bob.address)).to.equal(expectedWithBonus)
     expect(await this.weth.balanceOf(this.bob.address)).to.equal("1000000")
+  })
+
+  it("should be the same pool than the pair of tokens provided", async function () {
+    this.SimpleWallet = await ethers.getContractFactory("SimpleWallet")
+    this.wallet = await this.SimpleWallet.connect(this.bob).deploy(this.router.address, this.chef.address, this.sushi.address)
+    await this.wallet.deployed()
+
+    await this.sushi.transfer(this.bob.address, "1000000")
+    await this.weth.transfer(this.bob.address, "1000000")
+
+    await this.sushi.connect(this.bob).approve(this.wallet.address, "1000000")
+    await this.weth.connect(this.bob).approve(this.wallet.address, "1000000")
+    await this.sushi.connect(this.bob).transfer(this.wallet.address, "1000000")
+    await this.weth.connect(this.bob).transfer(this.wallet.address, "1000000")
+
+    await expect(this.wallet.connect(this.bob).addLiquidityWithFarming(this.sushi.address, this.weth.address,"1000000","1000000","1","1","10000000000", 1)).to.be.reverted
+    await this.wallet.connect(this.bob).addLiquidityWithFarming(this.sushi.address, this.weth.address,"1000000","1000000","1","1","10000000000", 0)
+
+    await advanceBlockTo("104")
+    await this.wallet.connect(this.bob).updateRewards(0) // block 105
+    
+    await expect (this.wallet.connect(this.bob).withdrawLiquidityWithRewards(this.sushi.address, this.weth.address,"1000000","1","1","10000000000", 1,"1000000")).to.be.revertedWith("withdraw: not good")
+
+    await this.wallet.connect(this.bob).withdrawLiquidityWithRewards(this.sushi.address, this.weth.address,"1000000","1","1","10000000000", 0,"1000000")
   })
     
 })
